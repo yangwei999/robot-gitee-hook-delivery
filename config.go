@@ -6,6 +6,7 @@ import (
 
 type configuration struct {
 	Config mq.MQConfig `json:"config" required:"true"`
+	Secret string      `json:"secret" required:"true"`
 }
 
 func (c *configuration) Validate() error {
