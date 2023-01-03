@@ -12,9 +12,9 @@ import (
 )
 
 type courier struct {
-	wg        sync.WaitGroup
-	topic     string
-	getSecret func() string
+	wg    sync.WaitGroup
+	topic string
+	hmac  func() string
 }
 
 func (c *courier) wait() {
@@ -23,10 +23,11 @@ func (c *courier) wait() {
 
 // ServeHTTP validates an incoming webhook and puts it into the event channel.
 func (c *courier) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	eventType, eventGUID, payload, _, ok := giteeclient.ValidateWebhook(w, r, c.getSecret)
+	eventType, eventGUID, payload, _, ok := giteeclient.ValidateWebhook(w, r, c.hmac)
 	if !ok {
 		return
 	}
+	fmt.Fprint(w, "Event received. Have a nice day.")
 
 	l := logrus.WithFields(
 		logrus.Fields{
@@ -46,7 +47,6 @@ func (c *courier) publish(payload []byte, h http.Header, l *logrus.Entry) error 
 		"X-Gitee-Event":     h.Get("X-Gitee-Event"),
 		"X-Gitee-Timestamp": h.Get("X-Gitee-Timestamp"),
 		"X-Gitee-Token":     h.Get("X-Gitee-Token"),
-		"User-Agent":        "Robot-Gitee-Access",
 	}
 
 	msg := mq.Message{
