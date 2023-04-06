@@ -2,17 +2,16 @@ package main
 
 import (
 	"errors"
-	"strings"
 
-	"github.com/opensourceways/community-robot-lib/kafka"
-	"github.com/opensourceways/community-robot-lib/mq"
-	"github.com/opensourceways/community-robot-lib/utils"
+	"github.com/opensourceways/server-common-lib/utils"
+
+	kafka "github.com/opensourceways/kafka-lib/agent"
 )
 
 type configuration struct {
-	Topic        string `json:"topic"          required:"true"`
-	UserAgent    string `json:"user_agent"     required:"true"`
-	KafkaAddress string `json:"kafka_address"  required:"true"`
+	Kafka     kafka.Config `json:"kafka"          required:"true"`
+	Topic     string       `json:"topic"          required:"true"`
+	UserAgent string       `json:"user_agent"     required:"true"`
 }
 
 func (c *configuration) validate() error {
@@ -24,20 +23,7 @@ func (c *configuration) validate() error {
 		return errors.New("missing user_agent")
 	}
 
-	if c.KafkaAddress == "" {
-		return errors.New("missing kafka_address")
-	}
-
-	return nil
-}
-
-func (c *configuration) kafkaConfig() (cfg mq.MQConfig, err error) {
-	v := strings.Split(c.KafkaAddress, ",")
-	if err = kafka.ValidateConnectingAddress(v); err == nil {
-		cfg.Addresses = v
-	}
-
-	return
+	return c.Kafka.Validate()
 }
 
 func loadConfig(path string) (cfg configuration, err error) {

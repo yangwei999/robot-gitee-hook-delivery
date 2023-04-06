@@ -7,12 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/opensourceways/community-robot-lib/interrupts"
-	"github.com/opensourceways/community-robot-lib/kafka"
-	"github.com/opensourceways/community-robot-lib/logrusutil"
-	"github.com/opensourceways/community-robot-lib/mq"
-	liboptions "github.com/opensourceways/community-robot-lib/options"
-	"github.com/opensourceways/community-robot-lib/secret"
+	kafka "github.com/opensourceways/kafka-lib/agent"
+	"github.com/opensourceways/server-common-lib/interrupts"
+	"github.com/opensourceways/server-common-lib/logrusutil"
+	liboptions "github.com/opensourceways/server-common-lib/options"
+	"github.com/opensourceways/server-common-lib/secret"
 	"github.com/sirupsen/logrus"
 )
 
@@ -50,13 +49,16 @@ func gatherOptions(fs *flag.FlagSet, args ...string) options {
 
 func main() {
 	logrusutil.ComponentInit(component)
+	log := logrus.NewEntry(logrus.StandardLogger())
 
 	o := gatherOptions(
 		flag.NewFlagSet(os.Args[0], flag.ExitOnError),
 		os.Args[1:]...,
 	)
 	if err := o.Validate(); err != nil {
-		logrus.WithError(err).Fatal("invalid options")
+		logrus.Errorf("invalid options, err:%s", err.Error())
+
+		return
 	}
 
 	if o.enableDebug {
@@ -67,29 +69,26 @@ func main() {
 	// cfg
 	cfg, err := loadConfig(o.service.ConfigFile)
 	if err != nil {
-		logrus.WithError(err).Fatal("load config")
+		logrus.Errorf("load config, err:%s", err.Error())
+
+		return
 	}
 
 	// init kafka
-	kafkaCfg, err := cfg.kafkaConfig()
-	if err != nil {
-		logrus.Fatalf("load kafka config, err:%s", err.Error())
+	if err := kafka.Init(&cfg.Kafka, log); err != nil {
+		logrus.Errorf("init kafka, err:%s", err.Error())
+
+		return
 	}
 
-	if err := connetKafka(&kafkaCfg); err != nil {
-		logrus.Fatalf("connect kafka, err:%s", err.Error())
-	}
-
-	defer func() {
-		if err := kafka.Disconnect(); err != nil {
-			logrus.Errorf("disconnet the mq failed, err:%s", err.Error())
-		}
-	}()
+	defer kafka.Exit()
 
 	// hmac
 	secretAgent := new(secret.Agent)
 	if err := secretAgent.Start([]string{o.hmacSecretFile}); err != nil {
-		logrus.WithError(err).Fatal("start secret agent.")
+		logrus.Errorf("start secret agent, err:%s", err.Error())
+
+		return
 	}
 
 	defer secretAgent.Stop()
@@ -122,22 +121,4 @@ func run(d *delivery, port int, gracePeriod time.Duration) {
 	httpServer := &http.Server{Addr: ":" + strconv.Itoa(port)}
 
 	interrupts.ListenAndServe(httpServer, gracePeriod)
-}
-
-func connetKafka(cfg *mq.MQConfig) error {
-	tlsConfig, err := cfg.TLSConfig.TLSConfig()
-	if err != nil {
-		return err
-	}
-
-	err = kafka.Init(
-		mq.Addresses(cfg.Addresses...),
-		mq.SetTLSConfig(tlsConfig),
-		mq.Log(logrus.WithField("module", "kfk")),
-	)
-	if err != nil {
-		return err
-	}
-
-	return kafka.Connect()
 }

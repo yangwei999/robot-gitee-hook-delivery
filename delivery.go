@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/opensourceways/community-robot-lib/giteeclient"
-	"github.com/opensourceways/community-robot-lib/kafka"
-	"github.com/opensourceways/community-robot-lib/mq"
+	kafka "github.com/opensourceways/kafka-lib/agent"
+	"github.com/opensourceways/robot-gitee-lib/client"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,7 +22,7 @@ func (d *delivery) wait() {
 }
 
 func (d *delivery) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	eventType, eventGUID, payload, _, ok := giteeclient.ValidateWebhook(w, r, d.hmac)
+	eventType, eventGUID, payload, _, ok := client.ValidateWebhook(w, r, d.hmac)
 	if !ok {
 		return
 	}
@@ -34,15 +33,12 @@ func (d *delivery) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *delivery) publish(payload []byte, h http.Header, eventType, eventGUID string) {
-	msg := mq.Message{
-		Header: map[string]string{
-			"content-type":      h.Get("content-type"),
-			"X-Gitee-Event":     h.Get("X-Gitee-Event"),
-			"X-Gitee-Timestamp": h.Get("X-Gitee-Timestamp"),
-			"X-Gitee-Token":     h.Get("X-Gitee-Token"),
-			"User-Agent":        d.userAgent,
-		},
-		Body: payload,
+	header := map[string]string{
+		"content-type":      h.Get("content-type"),
+		"X-Gitee-Event":     h.Get("X-Gitee-Event"),
+		"X-Gitee-Timestamp": h.Get("X-Gitee-Timestamp"),
+		"X-Gitee-Token":     h.Get("X-Gitee-Token"),
+		"User-Agent":        d.userAgent,
 	}
 
 	d.wg.Add(1)
@@ -56,7 +52,7 @@ func (d *delivery) publish(payload []byte, h http.Header, eventType, eventGUID s
 			},
 		)
 
-		if err := kafka.Publish(d.topic, &msg); err != nil {
+		if err := kafka.Publish(d.topic, header, payload); err != nil {
 			l.Errorf("failed to publish msg, err:%s", err.Error())
 		} else {
 			l.Debugf("publish message to topic(%s) successfully", d.topic)
