@@ -83,24 +83,25 @@ func main() {
 
 	defer kafka.Exit()
 
-	// hmac
-	secretAgent := new(secret.Agent)
-	if err := secretAgent.Start([]string{o.hmacSecretFile}); err != nil {
-		logrus.Errorf("start secret agent, err:%s", err.Error())
+	hmac, err := secret.LoadSingleSecret(o.hmacSecretFile)
+	if err != nil {
+		logrus.Errorf("load hmac, err:%s", err.Error())
 
 		return
 	}
 
-	defer secretAgent.Stop()
+	if err = os.Remove(o.hmacSecretFile); err != nil {
+		logrus.Errorf("remove hmac, err:%s", err.Error())
 
-	hmac := secretAgent.GetTokenGenerator(o.hmacSecretFile)
+		return
+	}
 
 	// server
 	d := delivery{
 		topic:     cfg.Topic,
 		userAgent: cfg.UserAgent,
 		hmac: func() string {
-			return string(hmac())
+			return string(hmac)
 		},
 	}
 
