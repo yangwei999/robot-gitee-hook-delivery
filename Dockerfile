@@ -1,4 +1,4 @@
-FROM openeuler/openeuler:23.03 as BUILDER
+FROM openeuler/openeuler:22.03 as BUILDER
 RUN dnf update -y && \
     dnf install -y golang && \
     go env -w GOPROXY=https://goproxy.cn,direct
